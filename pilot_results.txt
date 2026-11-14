@@ -1,0 +1,47 @@
+PILOT RUN - M0 (GRU baseline) - Item 1
+=======================================
+
+WHAT WE DID
+-----------
+1. Data: Azure LLM Inference Trace 2024 (AI coding service, 1 week, 16.8M requests).
+   We counted the requests per minute -> 10,080 minutes (prep_data.py).
+2. Split by time: first 70% train, next 15% validation (dev), last 15% test.
+   The test set was NOT used.
+3. Task: look at the last 30 minutes -> predict requests in each of the next 5 minutes.
+4. Model M0: GRU (64 units) + linear layer. Trained 10 epochs with Adam, seed 42.
+5. Checks: overfit-one-batch test, comparison with a simple rule,
+   model size, speed, and a quick INT8 quantization test (preview of M2).
+Hardware: laptop CPU, 1 thread, PyTorch 2.9.1. Speed measured on 1 input at a time.
+
+RAW RESULTS
+-----------
+overfit_one_batch_final_mse      : 0.0      (error after memorizing 32 examples)
+train_time_s                     : 12.4     (seconds to train 10 epochs)
+val_mae_per_epoch                : 209.7, 206.9, 168.3, 171.0, 161.6, 161.4, 158.0, 159.7, 166.5, 160.2
+M0_val_MAE_req_per_min           : 160.2    (M0 average error, requests/min)
+persistence_val_MAE_req_per_min  : 187.1    (simple rule "repeat last minute" error)
+val_mean_req_per_min             : 2242.4   (average traffic in validation)
+params                           : 13,765   (number of learned weights)
+size_kB                          : 56.4     (model file size)
+cpu_latency_ms (median, IQR)     : 3.00, 0.59  (time for one prediction)
+int8_size_kB                     : 18.3     (size after INT8)
+int8_val_MAE                     : 160.4    (error after INT8)
+int8_latency_ms (median, IQR)    : 6.98, 0.62  (time for one prediction after INT8)
+windows                          : train 7,022 / val 1,508  (number of training examples)
+
+WHAT WE INFER
+-------------
+1. The code works: the model memorized a small batch perfectly (error 0.0),
+   so there is no implementation bug.
+2. M0 learned real patterns: error 160 vs 187 for the simple rule (14% better).
+3. The error is about 7% of average traffic (160 / 2,242): a good baseline.
+4. Training is stable. Validation error was lowest at epoch 7 (158.0),
+   then went up and down -> we will use early stopping.
+5. The model is tiny (13,765 parameters, 56 kB) and trains in 12 seconds,
+   so we can afford 3 seeds and ablations.
+6. INT8 made the model 68% smaller with almost no accuracy loss (160.2 -> 160.4),
+   but 2x SLOWER (3.00 -> 6.98 ms). Smaller is not always faster.
+   Possible reason (not yet tested): for such a small model, converting numbers
+   to INT8 and back costs more time than it saves. We will test this in Item 3.
+
+NOTE: Single run, one seed. Results are preliminary.
